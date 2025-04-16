@@ -13,6 +13,7 @@ import org.springframework.context.ConfigurableApplicationContext;
 
 import java.io.IOException;
 import java.net.URL;
+import java.util.Objects; // Import for Objects.requireNonNull
 
 public class FxApplication extends Application {
 
@@ -38,10 +39,11 @@ public class FxApplication extends Application {
         log.info("Starting JavaFX Application UI...");
         try {
             FXMLLoader fxmlLoader = new FXMLLoader();
-            URL fxmlUrl = getClass().getResource("/com/group69/finance/view/fxml/main-window.fxml"); // Path within resources
+            // Adjusted path relative to resources root
+            URL fxmlUrl = getClass().getResource("/fxml/main-window.fxml");
 
             if (fxmlUrl == null) {
-                log.error("Cannot find FXML file: /com/group69/finance/view/fxml/main-window.fxml");
+                log.error("Cannot find FXML file: /fxml/main-window.fxml");
                 throw new IOException("Cannot find FXML file.");
             }
             log.debug("Loading FXML from: {}", fxmlUrl);
@@ -53,18 +55,24 @@ public class FxApplication extends Application {
             Parent root = fxmlLoader.load();
 
             Scene scene = new Scene(root, 850, 650); // Adjusted size slightly
-            // Example: Add CSS
-            // URL cssUrl = getClass().getResource("/com/group69/finance/view/css/styles.css");
-            // if (cssUrl != null) {
-            //     scene.getStylesheets().add(cssUrl.toExternalForm());
-            // } else {
-            //     log.warn("CSS file not found.");
-            // }
+
+            // *** APPLY THE CSS STYLESHEET ***
+            try {
+                // Path relative to resources root
+                URL cssUrl = getClass().getResource("/styles/element-like.css");
+                if (cssUrl != null) {
+                    scene.getStylesheets().add(cssUrl.toExternalForm());
+                    log.info("Applied CSS stylesheet: {}", cssUrl.toExternalForm());
+                } else {
+                    log.warn("CSS file not found at /styles/element-like.css");
+                }
+            } catch (Exception e) {
+                log.error("Failed to load or apply CSS stylesheet.", e);
+                // Decide if you want to continue without styles or exit
+            }
 
             primaryStage.setScene(scene);
-            // Retrieve title from Spring context/properties if desired, or set directly
-            // String title = springContext.getEnvironment().getProperty("app.ui.title", "Finance Tracker");
-            primaryStage.setTitle("Personal Finance Tracker (Group69 FX)");
+            primaryStage.setTitle("Personal Finance Tracker (Element Style)");
             primaryStage.show();
             log.info("JavaFX Application UI Started.");
 

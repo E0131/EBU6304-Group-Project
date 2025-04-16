@@ -5,7 +5,6 @@ import com.group69.finance.model.Source;
 import com.group69.finance.model.Transaction;
 import com.group69.finance.repository.FinanceDataRepository;
 import com.group69.finance.service.CategorizationService;
-// Import PersistenceService if CSV import/export is added
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -14,31 +13,27 @@ import javafx.fxml.FXML;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.ComboBoxTableCell;
 import javafx.scene.control.cell.PropertyValueFactory;
-import javafx.stage.FileChooser; // For CSV import/export
-import jakarta.annotation.PostConstruct; // Or javax.annotation if using older Spring Boot / different Jakarta EE setup
+import javafx.stage.FileChooser;
+import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component; // Use @Component for FXML Controllers managed by Spring
+import org.springframework.stereotype.Component;
 
-import java.io.File; // For CSV import/export
-import java.io.IOException; // For CSV import/export
+import java.io.File;
+import java.io.IOException;
 import java.time.LocalDate;
-import java.time.format.DateTimeParseException;
-import java.util.List;
+import java.util.List; // Import List
 
-@Component // Mark as a Spring component
+@Component
 public class MainWindowController {
 
     private static final Logger log = LoggerFactory.getLogger(MainWindowController.class);
 
-    // --- Injected Fields (from Spring Context) ---
     private final FinanceDataRepository repository;
     private final CategorizationService categorizationService;
-    // Inject PersistenceService if needed for CSV:
-    // private final PersistenceService persistenceService;
+    // private final PersistenceService persistenceService; // If needed for CSV
 
-    // --- FXML Injected Fields (UI Elements) ---
     @FXML private TableView<Transaction> transactionTable;
     @FXML private TableColumn<Transaction, LocalDate> dateCol;
     @FXML private TableColumn<Transaction, String> descriptionCol;
@@ -54,41 +49,32 @@ public class MainWindowController {
     @FXML private ComboBox<Source> sourceComboBox;
 
     @FXML private Button addButton;
-    @FXML private Button clearButton; // Added clear button
+    @FXML private Button clearButton;
 
-    // Menu Items (can be handled directly or via injected MainFrame reference)
     @FXML private MenuItem loadMenuItem;
     @FXML private MenuItem saveMenuItem;
     @FXML private MenuItem exitMenuItem;
 
-    // Observable list to back the TableView
     private ObservableList<Transaction> transactionData = FXCollections.observableArrayList();
 
-    // --- Constructor Injection ---
     @Autowired
     public MainWindowController(FinanceDataRepository repository, CategorizationService categorizationService) {
         this.repository = repository;
         this.categorizationService = categorizationService;
         log.info("MainWindowController initialized.");
-        // PersistenceService injection if needed:
-        // this.persistenceService = persistenceService;
     }
 
-    // --- Initialization ---
-    @PostConstruct // Good place for non-UI init logic, but UI init happens in initialize()
+    @PostConstruct
     public void postConstruct() {
         log.debug("MainWindowController PostConstruct called.");
-        // Load initial data (happens in repository @PostConstruct)
-        // Set up data list for the table
         transactionData.setAll(repository.getAllTransactions());
     }
 
-
-    // Called by FXMLLoader after injecting FXML fields
     @FXML
     private void initialize() {
-        log.debug("Initializing FXML components...");
-        // --- Setup Table Columns ---
+        log.debug("Initializing FXML components and setting cell factories...");
+
+        // --- Setup Table Columns (Standard PropertyValueFactory) ---
         dateCol.setCellValueFactory(new PropertyValueFactory<>("date"));
         descriptionCol.setCellValueFactory(new PropertyValueFactory<>("description"));
         amountCol.setCellValueFactory(new PropertyValueFactory<>("amount"));
@@ -96,7 +82,8 @@ public class MainWindowController {
         sourceCol.setCellValueFactory(new PropertyValueFactory<>("source"));
         aiCol.setCellValueFactory(new PropertyValueFactory<>("aiSuggestedCategory"));
 
-        // --- Custom Cell Rendering (Optional but recommended) ---
+        // --- Custom Cell Rendering (Apply CSS Classes) ---
+
         // Format Date
         dateCol.setCellFactory(column -> new TableCell<Transaction, LocalDate>() {
             @Override
@@ -110,59 +97,111 @@ public class MainWindowController {
             }
         });
 
-        // Format Amount (e.g., currency) - Basic version shown
+        // Format Amount (Add alignment and conditional income/expense classes)
         amountCol.setCellFactory(column -> new TableCell<Transaction, Double>() {
             @Override
             protected void updateItem(Double item, boolean empty) {
                 super.updateItem(item, empty);
-                if (empty || item == null) {
+
+                getStyleClass().removeAll("amount-income", "amount-expense", "cell-align-right");
+
+                if (empty || item == null || getTableRow() == null || getTableRow().getItem() == null) {
                     setText(null);
-                    setStyle(""); // Reset style
                 } else {
-                    // Basic number formatting
                     setText(String.format("%.2f", item));
-                    // Example: Color code amount (red for negative/expense, green for positive/income)
-                    Category category = getTableView().getItems().get(getIndex()).getCategory();
-                    if (category != null && category.isIncome()) {
-                        setStyle("-fx-text-fill: green; -fx-alignment: CENTER-RIGHT;");
-                    } else {
-                        setStyle("-fx-text-fill: red; -fx-alignment: CENTER-RIGHT;");
+                    getStyleClass().add("cell-align-right");
+
+                    Transaction transaction = (Transaction) getTableRow().getItem();
+
+                    if (transaction != null) {
+                        Category category = transaction.getCategory();
+                        if (category != null && category.isIncome()) {
+                            getStyleClass().add("amount-income");
+                        } else {
+                            getStyleClass().add("amount-expense");
+                        }
                     }
                 }
             }
         });
 
 
-        // Render Boolean as Y/N for AI column
+        // Render Boolean as Y/N for AI column (Add alignment class)
         aiCol.setCellFactory(column -> new TableCell<Transaction, Boolean>() {
             @Override
             protected void updateItem(Boolean item, boolean empty) {
                 super.updateItem(item, empty);
-                setText(empty ? null : (item ? "Y" : "N"));
-                setStyle("-fx-alignment: CENTER;");
+                getStyleClass().removeAll("cell-align-center");
+                if (empty || item == null) {
+                    setText(null);
+                } else {
+                    setText(item ? "Y" : "N");
+                    getStyleClass().add("cell-align-center");
+                }
             }
         });
 
 
-        // --- Make Category Column Editable ---
-        categoryCol.setCellFactory(ComboBoxTableCell.forTableColumn(FXCollections.observableArrayList(Category.values())));
+        // Make Category Column Editable
+        categoryCol.setCellFactory( tc -> {
+            ComboBoxTableCell<Transaction, Category> cell = new ComboBoxTableCell<>(FXCollections.observableArrayList(Category.values()));
+            return cell;
+        });
         categoryCol.setOnEditCommit(event -> {
-            Transaction transaction = event.getRowValue();
+            Transaction transaction = event.getRowValue(); // Get the data item for the row being edited
             Category oldCategory = event.getOldValue();
             Category newCategory = event.getNewValue();
+
+            // Check if a valid change was made
             if (transaction != null && newCategory != null && !newCategory.equals(oldCategory)) {
                 log.debug("Manual category change via table edit: {} -> {}", oldCategory, newCategory);
-                transaction.setCategory(newCategory); // This sets AI flag to false
-                // Find the index in the underlying repository list (assuming table isn't sorted/filtered differently)
-                int modelIndex = transactionData.indexOf(transaction); // May need adjustment if list != repo list directly
+                transaction.setCategory(newCategory); // Update the model object (also sets AI flag to false in setter)
+
+                int modelIndex = transactionData.indexOf(transaction); // Find index in our observable list
                 if (modelIndex != -1) {
-                    repository.updateTransaction(modelIndex, transaction); // Update repository
-                    // Refresh the specific row's AI flag display if needed, or rely on full refresh
-                    // transactionTable.refresh(); // Could refresh whole table
-                    // Or update just the boolean cell for efficiency:
-                    transactionData.set(modelIndex, transaction); // Trigger table update for the row
+                    repository.updateTransaction(modelIndex, transaction); // Update the repository data
+
+                    // Refresh the item in the ObservableList to ensure UI updates,
+                    // especially for the AI? column which depends on the transaction state.
+                    transactionData.set(modelIndex, transaction);
+
+                    log.debug("Transaction updated in repository and UI list at index {}", modelIndex);
                 } else {
-                    log.warn("Could not find transaction index in observable list for update.");
+                    log.warn("Could not find transaction index in observable list for update after edit commit.");
+                    // Fallback: Refresh the whole table if index is lost
+                    transactionTable.refresh();
+                }
+            } else if (transaction != null) {
+                // This block handles cases where the edit was cancelled (e.g., Esc pressed)
+                // or the new value was the same as the old one or null.
+                // We need to ensure the cell visually reflects the *original* state of the transaction.
+                log.debug("Category edit cancelled or no change occurred. Reverting visual state for row {}.", event.getTablePosition().getRow());
+
+                // *** CORRECTED LINE ***
+                // Use the event object to get the TableView reference.
+                // Resetting the item in the list forces the TableView to redraw the row cells
+                // using the current (unchanged) state of the transaction object.
+                int viewIndex = event.getTablePosition().getRow();
+                event.getTableView().getItems().set(viewIndex, transaction);
+
+                // Optional: A full table refresh might be needed in rare cases if the above doesn't work
+                // event.getTableView().refresh();
+            } else {
+                log.warn("Transaction object was null during edit commit handling for category.");
+                // Refresh table as a precaution
+                transactionTable.refresh();
+            }
+        });
+
+        // Source column cell factory
+        sourceCol.setCellFactory(column -> new TableCell<Transaction, Source>() {
+            @Override
+            protected void updateItem(Source item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                } else {
+                    setText(item.toString());
                 }
             }
         });
@@ -173,18 +212,17 @@ public class MainWindowController {
         sourceComboBox.setItems(FXCollections.observableArrayList(Source.values()));
 
         // --- Set Default Values for Input Form ---
-        handleClearForm(null); // Use clear form logic for defaults
+        handleClearForm(null);
 
         // --- Link TableView to ObservableList ---
         transactionTable.setItems(transactionData);
-        log.debug("FXML components initialized.");
+        log.debug("FXML components initialized and cell factories configured.");
 
-        // Initial data is loaded by repository, refresh view just in case
-        refreshTableView();
+        // Initial data is loaded by repository
     }
 
     // --- Event Handlers ---
-
+    // [ ... Keep ALL existing Event Handlers (handleAddTransaction, handleDeleteTransaction, etc.) ... ]
     @FXML
     void handleAddTransaction(ActionEvent event) {
         try {
@@ -206,7 +244,7 @@ public class MainWindowController {
                 return;
             }
 
-            double amount = Double.parseDouble(amountText); // Can throw NumberFormatException
+            double amount = Double.parseDouble(amountText);
             Category selectedCategory = categoryComboBox.getValue();
             Source source = sourceComboBox.getValue();
 
@@ -219,24 +257,20 @@ public class MainWindowController {
                 return;
             }
 
-            // --- AI Categorization Logic (if default selected) ---
             boolean aiSuggested = false;
             Category finalCategory = selectedCategory;
-            // Create temporary transaction to pass to AI service (only if necessary)
             if (selectedCategory == Category.UNCATEGORIZED) {
                 Transaction tempTransaction = new Transaction(date, description, amount, Category.UNCATEGORIZED, source, false);
                 finalCategory = categorizationService.suggestCategory(tempTransaction);
-                aiSuggested = (finalCategory != Category.UNCATEGORIZED);
+                aiSuggested = (finalCategory != Category.UNCATEGORIZED && finalCategory != null); // Ensure AI didn't return null
+                if (finalCategory == null) finalCategory = Category.UNCATEGORIZED; // Fallback if AI fails
             }
 
-            // --- Create and Add Transaction ---
             Transaction newTransaction = new Transaction(date, description, amount, finalCategory, source, aiSuggested);
             repository.addTransaction(newTransaction);
 
-            // --- Update UI ---
-            // transactionData.add(newTransaction); // Add directly or refresh
-            refreshTableView(); // Refreshing is simpler
-            handleClearForm(null); // Clear form after adding
+            refreshTableView(); // Refreshing updates the ObservableList which TableView observes
+            handleClearForm(null);
 
             log.info("Added transaction: {}", description);
 
@@ -267,19 +301,14 @@ public class MainWindowController {
 
         alert.showAndWait().ifPresent(response -> {
             if (response == ButtonType.YES) {
-                // Find index in the repository list
-                // This assumes the observable list directly reflects the repo list order
                 int modelIndex = transactionData.indexOf(selectedTransaction);
                 if (modelIndex != -1) {
                     repository.removeTransactionAtIndex(modelIndex);
-                    // transactionData.remove(selectedTransaction); // Remove directly or refresh
-                    refreshTableView(); // Refreshing is simpler
+                    refreshTableView(); // Refresh observable list from repo
                     log.info("Deleted transaction: {}", selectedTransaction.getDescription());
                 } else {
                     log.warn("Could not find selected transaction in observable list for deletion.");
-                    // Fallback: try removing by ID if IDs are reliable
-                    // repository.removeTransactionById(selectedTransaction.getId());
-                    refreshTableView();
+                    refreshTableView(); // Refresh anyway
                 }
             }
         });
@@ -292,12 +321,11 @@ public class MainWindowController {
         amountField.clear();
         categoryComboBox.setValue(Category.UNCATEGORIZED); // Default to Uncategorized
         sourceComboBox.getSelectionModel().selectFirst(); // Select first source or null
-        descriptionField.requestFocus(); // Set focus to description
+        descriptionField.requestFocus();
     }
 
     @FXML
     void handleLoadData(ActionEvent event) {
-        // Data is loaded initially by repository. This reloads from the default file.
         repository.loadInitialData();
         refreshTableView();
         showInfoDialog("Load Data", "Data reloaded successfully from default file.");
@@ -306,47 +334,32 @@ public class MainWindowController {
 
     @FXML
     void handleSaveData(ActionEvent event) {
-        repository.saveAllData(); // Repository knows the path
+        repository.saveAllData();
         showInfoDialog("Save Data", "Data saved successfully.");
         log.info("Handled Save Data request.");
     }
 
     @FXML
     void handleImportCsv(ActionEvent event) {
-        // TODO: Implement CSV Import Logic
         FileChooser fileChooser = new FileChooser();
         fileChooser.setTitle("Import Transactions from CSV");
         fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("CSV Files", "*.csv"));
         File selectedFile = fileChooser.showOpenDialog(transactionTable.getScene().getWindow()); // Get stage
 
         if (selectedFile != null) {
+            log.warn("CSV Import functionality not yet implemented. Selected file: {}", selectedFile.getAbsolutePath());
             showInfoDialog("Import CSV", "CSV Import functionality not yet implemented.\nSelected file: " + selectedFile.getName());
-            // Steps:
-            // 1. Create/Use a CsvPersistenceService implementing PersistenceService or a dedicated import service.
-            // 2. Call the service to read transactions from selectedFile.
-            // 3. Handle potential errors during CSV parsing (IOException, format errors).
-            // 4. Add the successfully parsed transactions to the repository.
-            // 5. Refresh the table view.
-            // Example call:
-             /*
-             try {
-                 // Assuming csvPersistenceService exists and implements loadTransactions
-                 List<Transaction> importedTransactions = csvPersistenceService.loadTransactions(selectedFile.getAbsolutePath());
-                 importedTransactions.forEach(repository::addTransaction); // Add to repository
-                 refreshTableView();
-                 showInfoDialog("Import CSV", "Successfully imported " + importedTransactions.size() + " transactions.");
-             } catch (IOException e) {
-                 log.error("Error importing CSV", e);
-                 showErrorDialog("Import Error", "Failed to import CSV file: " + e.getMessage());
-             }
-             */
         }
+    }
+
+    @FXML
+    void handleAbout(ActionEvent event) {
+        showInfoDialog("About", "Personal Finance Tracker v1.0 (Group69 FX)\nStyled with CSS");
     }
 
 
     @FXML
     void handleExit(ActionEvent event) {
-        // Optionally confirm save before exiting
         Alert alert = new Alert(Alert.AlertType.CONFIRMATION,
                 "Do you want to save changes before exiting?",
                 ButtonType.YES, ButtonType.NO, ButtonType.CANCEL);
@@ -355,9 +368,9 @@ public class MainWindowController {
 
         alert.showAndWait().ifPresent(response -> {
             if (response == ButtonType.YES) {
-                handleSaveData(null); // Save data
-                Platform.exit(); // Exit JavaFX application
-                System.exit(0); // Ensure JVM terminates if Platform.exit isn't enough
+                handleSaveData(null);
+                Platform.exit();
+                System.exit(0);
             } else if (response == ButtonType.NO) {
                 Platform.exit();
                 System.exit(0);
@@ -366,16 +379,12 @@ public class MainWindowController {
         });
     }
 
-
     // --- Helper Methods ---
 
     private void refreshTableView() {
-        log.debug("Refreshing TableView...");
-        // Get fresh data from repository and update the observable list
+        log.debug("Refreshing TableView data...");
         transactionData.setAll(repository.getAllTransactions());
-        // No need to call transactionTable.setItems() again if it was set initially
-        // transactionTable.sort(); // Re-apply sort if needed
-        log.debug("TableView refreshed with {} items.", transactionData.size());
+        log.debug("TableView data refreshed with {} items.", transactionData.size());
     }
 
     private void showErrorDialog(String title, String content) {
